@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assignment → Jira</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #faf9f5;
+    --surface: #ffffff;
+    --surface2: #f4f3ef;
+    --border: #e5e3db;
+    --border-dark: #ccc9be;
+    --text: #1a1916;
+    --text-muted: #6b6760;
+    --text-dim: #aaa9a4;
+    --accent: #2d5a3d;
+    --accent-light: #eef4f0;
+    --accent-border: #b8d4c0;
+    --warn: #92400e;
+    --warn-bg: #fffbeb;
+    --error: #991b1b;
+    --error-bg: #fef2f2;
+    --success: #166534;
+    --success-bg: #f0fdf4;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Source Sans 3", sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 48px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .header-title {
+    font-family: "Lora", Georgia, serif;
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .header-sep { color: var(--text-dim); }
+  .header-sub { font-size: 13px; color: var(--text-muted); }
+
+  .header-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .cred-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .cred-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #d1d5db;
+    transition: background 0.2s;
+  }
+
+  .cred-dot.ok { background: var(--accent); }
+
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 44px 24px 80px;
+  }
+
+  .steps {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 48px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .step-item {
+    display: flex;
+    align-items: flex-start;
+    flex: 1 0 0;
+    min-width: 140px;
+  }
+
+  .step-button {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+    color: inherit;
+    text-align: left;
+  }
+
+  .step-button:focus-visible {
+    outline: 2px solid var(--accent-border);
+    outline-offset: 6px;
+    border-radius: 10px;
+  }
+
+  .step-button[disabled] {
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .step-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg);
+    padding-right: 10px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg);
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+
+  .step-name {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 500;
+    white-space: nowrap;
+    background: var(--bg);
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-button:hover .step-name,
+  .step-button:focus-visible .step-name { color: var(--text-muted); }
+
+  .step-item.active .step-circle {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .step-item.done .step-circle {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .step-item.active .step-name,
+  .step-item.done .step-name { color: var(--text-muted); }
+
+  .step-item.locked .step-button { cursor: default; }
+
+  .step-connector {
+    flex: 1;
+    min-width: 24px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    margin-left: 10px;
+  }
+
+  .step-connector::before {
+    content: "";
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .step-item.done .step-connector::before { background: var(--accent-border); }
+
+  .section-heading {
+    font-family: "Lora", Georgia, serif;
+    font-size: 25px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+
+  .section-sub {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+    line-height: 1.6;
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadeUp 0.22s ease; }
+  .is-hidden { display: none !important; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(7px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .note {
+    background: var(--warn-bg);
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--warn);
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+
+  .note strong { font-weight: 600; }
+
+  .cred-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-group.full { grid-column: 1 / -1; }
+
+  .form-group label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .form-group input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 13px;
+    color: var(--text);
+    font-family: "Source Sans 3", sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+  }
+
+  .form-group input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(45, 90, 61, 0.08);
+  }
+
+  .form-group input::placeholder { color: var(--text-dim); }
+
+  .form-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  .upload-area {
+    border: 2px dashed var(--border-dark);
+    border-radius: 12px;
+    padding: 52px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    position: relative;
+  }
+
+  .upload-area:hover,
+  .upload-area.dragover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .upload-area input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    width: 44px;
+    height: 44px;
+    background: var(--surface2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+  }
+
+  .upload-icon svg {
+    width: 22px;
+    height: 22px;
+    stroke: var(--text-muted);
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .upload-title {
+    font-family: "Lora", Georgia, serif;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 5px;
+  }
+
+  .upload-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .upload-preview {
+    margin-top: 20px;
+    display: none;
+  }
+
+  .upload-preview img {
+    max-width: 100%;
+    max-height: 280px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    object-fit: contain;
+  }
+
+  .class-input-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .class-input-row .form-group { flex: 1; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-family: "Source Sans 3", sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #234a30; }
+
+  .btn-primary:disabled,
+  .btn-secondary:disabled,
+  .btn-ghost:disabled {
+    background: var(--border-dark);
+    color: var(--text-dim);
+    cursor: not-allowed;
+    border-color: var(--border-dark);
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--border-dark);
+    background: var(--surface2);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    padding: 8px 12px;
+  }
+
+  .btn-ghost:hover {
+    color: var(--text);
+    background: var(--surface2);
+  }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--error);
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .btn-danger:hover { background: var(--error-bg); }
+
+  .btn svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .actions-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 28px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .status-msg {
+    display: none;
+    padding: 11px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-top: 16px;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .status-msg.show { display: flex; }
+  .status-msg.error { background: var(--error-bg); color: var(--error); border: 1px solid #fca5a5; }
+  .status-msg.success { background: var(--success-bg); color: var(--success); border: 1px solid #86efac; }
+  .status-msg.info { background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent-border); }
+
+  .preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .preview-count {
+    font-size: 13px;
+    color: var(--text-muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  thead th {
+    background: var(--surface2);
+    padding: 11px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr.excluded { opacity: 0.35; }
+  tbody td { padding: 9px 14px; vertical-align: middle; }
+
+  .editable-cell {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 5px 8px;
+    font-family: "Source Sans 3", sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    width: 100%;
+    transition: border-color 0.15s, background 0.15s;
+    outline: none;
+  }
+
+  .editable-cell:focus {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .editable-cell::placeholder { color: var(--text-dim); }
+  .editable-cell.date-input { width: 140px; font-size: 13px; }
+
+  .label-input {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+    outline: none;
+    width: 140px;
+    transition: all 0.15s;
+    font-family: "Source Sans 3", sans-serif;
+  }
+
+  .label-input:focus {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .row-toggle {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+
+  .dup-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--warn-bg);
+    border: 1px solid #fcd34d;
+    color: var(--warn);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    cursor: help;
+    letter-spacing: 0.02em;
+  }
+
+  .dup-badge svg {
+    width: 11px;
+    height: 11px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    flex-shrink: 0;
+  }
+
+  tbody tr.maybe-dup { background: #fffdf0; }
+  tbody tr.maybe-dup:hover { background: #fffbe8; }
+
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .result-num {
+    font-family: "Lora", Georgia, serif;
+    font-size: 32px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .result-card.ok .result-num { color: var(--accent); }
+  .result-card.fail .result-num { color: var(--error); }
+  .result-card.skip .result-num { color: var(--text-muted); }
+  .result-label { font-size: 13px; color: var(--text-muted); }
+
+  .result-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .result-item:last-child { border-bottom: none; }
+  .result-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .result-dot.ok { background: var(--accent); }
+  .result-dot.fail { background: var(--error); }
+  .result-item-name { flex: 1; color: var(--text); }
+  .result-item-status { color: var(--text-muted); font-size: 12px; }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 28px 0;
+  }
+
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(250, 249, 245, 0.88);
+    backdrop-filter: blur(4px);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .loading-overlay.show { display: flex; }
+
+  .loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-family: "Lora", Georgia, serif;
+    font-size: 16px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  @media (max-width: 720px) {
+    header {
+      padding: 16px 20px;
+      flex-wrap: wrap;
+    }
+
+    .container {
+      padding: 28px 16px 60px;
+    }
+
+    .cred-grid,
+    .result-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .steps {
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .step-item {
+      min-width: 132px;
+      flex: 0 0 auto;
+    }
+
+    .preview-header {
+      flex-direction: column;
+    }
+
+    table,
+    thead,
+    tbody,
+    th,
+    td,
+    tr { display: block; }
+
+    thead { display: none; }
+
+    table {
+      border: none;
+      background: transparent;
+    }
+
+    tbody tr {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      padding: 12px;
+    }
+
+    tbody td {
+      padding: 6px 0;
+    }
+
+    .editable-cell.date-input,
+    .label-input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="header-title">Assignment → Jira</span>
+  <span class="header-sep">·</span>
+  <span class="header-sub">Screenshot to backlog in seconds</span>
+  <div class="header-actions">
+    <div class="cred-bar">
+      <div class="cred-dot" id="credDot"></div>
+      <span id="credLabel">No credentials</span>
+    </div>
+    <button class="btn btn-ghost local-only" id="headerSettingsBtn" type="button" style="font-size:13px;padding:6px 14px;">Settings</button>
+  </div>
+</header>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loadingText">Analyzing screenshot…</div>
+</div>
+
+<div class="container">
+  <div class="steps" id="stepsNav" aria-label="Progress"></div>
+
+  <div class="panel local-only" id="panelCreds">
+    <h2 class="section-heading">Connect your accounts</h2>
+    <p class="section-sub">Credentials are stored in your browser's local storage. Gemini requests go to Google, and Jira requests go through your local proxy running on this computer.</p>
+
+    <div class="note">
+      <strong>Finding your Jira details:</strong> API token at <em>id.atlassian.com/manage-profile/security/api-tokens</em> &nbsp;·&nbsp;
+      Your domain is <em>yourname.atlassian.net</em> &nbsp;·&nbsp;
+      Project key is the prefix before issue numbers (for example, if tasks are <em>SCH-4</em>, the key is <em>SCH</em>)
+    </div>
+
+    <div class="note" style="background:var(--accent-light); border-color:var(--accent-border); color:var(--accent);">
+      <strong>Local proxy required:</strong> Start <code>python3 jira_proxy.py</code> in this folder, then open this app from a local web server such as <em>http://localhost:8080</em>.
+    </div>
+
+    <div class="cred-grid">
+      <div class="form-group">
+        <label for="jiraEmail">Jira Email</label>
+        <input type="email" id="jiraEmail" placeholder="you@example.com">
+      </div>
+      <div class="form-group">
+        <label for="jiraToken">Jira API Token</label>
+        <input type="password" id="jiraToken" placeholder="Your API token">
+      </div>
+      <div class="form-group">
+        <label for="jiraDomain">Jira Domain</label>
+        <input type="text" id="jiraDomain" placeholder="yourname.atlassian.net">
+        <span class="form-hint">Without <code>https://</code> — just the hostname</span>
+      </div>
+      <div class="form-group">
+        <label for="jiraProject">Project Key</label>
+        <input type="text" id="jiraProject" placeholder="e.g. SCH" style="text-transform:uppercase">
+      </div>
+      <div class="form-group full">
+        <label for="anthropicKey">Gemini API Key</label>
+        <input type="password" id="anthropicKey" placeholder="AIza...">
+        <span class="form-hint">Used only in local mode to parse screenshots. Get yours at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style="color:var(--accent)">aistudio.google.com/apikey</a></span>
+      </div>
+    </div>
+
+    <div class="actions-row">
+      <button class="btn btn-primary" id="saveCredsBtn" type="button">
+        <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        Save &amp; Continue
+      </button>
+    </div>
+    <div class="status-msg" id="credsStatus"></div>
+  </div>
+
+  <div class="panel" id="panelUpload">
+    <h2 class="section-heading">Upload your assignment screenshot</h2>
+    <p class="section-sub" id="uploadSubtitle">Take a screenshot of your Canvas or LearningSuite page and drop it below. Gemini will extract assignment names and due dates automatically.</p>
+
+    <div class="upload-area" id="uploadArea">
+      <input type="file" id="fileInput" accept="image/*">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="upload-title">Drop screenshot here</div>
+      <div class="upload-sub">or click to browse — PNG, JPG, WEBP</div>
+    </div>
+
+    <div class="upload-preview" id="uploadPreview">
+      <img id="previewImg" src="" alt="Preview">
+    </div>
+
+    <div class="class-input-row">
+      <div class="form-group">
+        <label for="classLabel">Course Label</label>
+        <input type="text" id="classLabel" placeholder="e.g. CS110, MATH215, ECON200">
+        <span class="form-hint">Applied as the Jira label on every task from this screenshot</span>
+      </div>
+    </div>
+
+    <div class="actions-row">
+      <button class="btn btn-primary" id="parseBtn" type="button" disabled>
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span>Extract Assignments</span>
+      </button>
+      <button class="btn btn-ghost local-only" id="uploadSettingsBtn" type="button">Settings</button>
+    </div>
+    <div class="status-msg" id="uploadStatus"></div>
+  </div>
+
+  <div class="panel" id="panelPreview">
+    <div class="preview-header">
+      <div>
+        <h2 class="section-heading">Review &amp; edit</h2>
+        <p class="section-sub" style="margin-bottom:0">Uncheck rows to skip them. Click any cell to edit. Changes are reflected when sent to Jira.</p>
+      </div>
+      <div class="preview-count" id="previewCount">0 tasks</div>
+      <div class="preview-count" id="dupCount" style="display:none; border-color:#fcd34d; color:var(--warn); background:var(--warn-bg);">0 possible duplicates</div>
+    </div>
+
+    <table id="previewTable">
+      <thead>
+        <tr>
+          <th style="width:36px"></th>
+          <th>Assignment Name</th>
+          <th style="width:155px">Due Date</th>
+          <th style="width:155px">Label</th>
+          <th style="width:44px"></th>
+        </tr>
+      </thead>
+      <tbody id="previewBody"></tbody>
+    </table>
+
+    <div class="actions-row">
+      <button class="btn btn-primary" id="sendBtn" type="button" disabled>
+        <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <span>Create Jira Tasks</span>
+      </button>
+      <button class="btn btn-secondary" id="addRowBtn" type="button">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Row
+      </button>
+      <button class="btn btn-ghost" id="previewBackBtn" type="button">Back</button>
+    </div>
+    <div class="status-msg" id="previewStatus"></div>
+  </div>
+
+  <div class="panel" id="panelResult">
+    <h2 class="section-heading">All done.</h2>
+    <p class="section-sub">Here’s a summary of what was sent to your Jira backlog.</p>
+
+    <div class="result-grid">
+      <div class="result-card ok">
+        <div class="result-num" id="resultCreated">0</div>
+        <div class="result-label">Tasks created</div>
+      </div>
+      <div class="result-card fail">
+        <div class="result-num" id="resultFailed">0</div>
+        <div class="result-label">Failed</div>
+      </div>
+      <div class="result-card skip">
+        <div class="result-num" id="resultSkipped">0</div>
+        <div class="result-label">Skipped</div>
+      </div>
+    </div>
+
+    <div id="resultList"></div>
+
+    <div class="divider"></div>
+    <div class="actions-row">
+      <button class="btn btn-primary" id="resetBtn" type="button">
+        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        Upload Another Screenshot
+      </button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
