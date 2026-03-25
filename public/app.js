@@ -84,12 +84,14 @@ function setupEventListeners() {
     if (file) processFile(file);
   });
 
+  document.getElementById("clearUploadPreviewBtn").addEventListener("click", clearUploadPreview);
   document.getElementById("headerSettingsBtn").addEventListener("click", () => showPanel("creds"));
   document.getElementById("uploadSettingsBtn").addEventListener("click", () => showPanel("creds"));
   document.getElementById("saveCredsBtn").addEventListener("click", saveCreds);
   document.getElementById("parseBtn").addEventListener("click", parseScreenshot);
   document.getElementById("sendBtn").addEventListener("click", sendToJira);
   document.getElementById("addRowBtn").addEventListener("click", addRow);
+  document.getElementById("bulkToggleBtn").addEventListener("click", toggleAllRows);
   document.getElementById("previewBackBtn").addEventListener("click", () => showPanel("upload"));
   document.getElementById("resetBtn").addEventListener("click", resetApp);
 }
@@ -208,6 +210,9 @@ function showPanel(name, options = {}) {
 
   renderSteps();
   refreshActionStates();
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  });
 }
 
 function clearStatusMessages(preserveIds = []) {
@@ -290,6 +295,25 @@ function getLocalJiraCreds() {
   };
 }
 
+function getJiraBrowseUrl(domain, key) {
+  const normalizedDomain = normalizeDomain(domain);
+  const issueKey = String(key || "").trim();
+  if (!normalizedDomain || !issueKey) return "";
+  return `https://${normalizedDomain}/browse/${encodeURIComponent(issueKey)}`;
+}
+
+function normalizeIssueRecord(issue, fallbackDomain = "") {
+  const key = String(issue?.key || "").trim();
+  const summary = String(issue?.fields?.summary || issue?.summary || "").trim();
+  if (!key || !summary) return null;
+
+  return {
+    key,
+    summary,
+    browseUrl: String(issue?.browseUrl || getJiraBrowseUrl(fallbackDomain, key)).trim(),
+  };
+}
+
 function formatApiError(status, data) {
   const fallback = `Request failed (${status})`;
   const base =
@@ -365,6 +389,21 @@ function setupDragDrop() {
     const file = event.dataTransfer?.files?.[0];
     if (file && file.type.startsWith("image/")) processFile(file);
   });
+}
+
+function clearUploadPreview() {
+  imageBase64 = null;
+  document.getElementById("fileInput").value = "";
+  document.getElementById("uploadPreview").style.display = "none";
+  document.getElementById("previewImg").src = "";
+
+  const uploadStatus = document.getElementById("uploadStatus");
+  if (uploadStatus) {
+    uploadStatus.className = "status-msg";
+    uploadStatus.textContent = "";
+  }
+
+  refreshActionStates();
 }
 
 function processFile(file) {
@@ -484,17 +523,24 @@ function buildTable(items) {
     if (item.dupMatch) tr.classList.add("maybe-dup");
 
     const dupHtml = item.dupMatch
-      ? `<span class="dup-badge" title="Possible duplicate of: ${esc(item.dupMatch)}">
-           <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-           possible dup
-         </span>`
+      ? `<div class="assignment-meta assignment-meta-duplicate">
+           <span class="dup-icon" aria-hidden="true">
+             <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+           </span>
+           <div class="dup-key-line">
+             ${item.dupMatch.browseUrl
+      ? `<a class="dup-key-link" href="${esc(item.dupMatch.browseUrl)}" target="_blank" rel="noreferrer noopener">${esc(item.dupMatch.key)}</a>`
+      : `<span class="dup-key-text">${esc(item.dupMatch.key)}</span>`}
+           </div>
+           <div class="dup-summary" title="${esc(item.dupMatch.summary)}">${esc(item.dupMatch.summary)}</div>
+         </div>`
       : "";
 
     tr.innerHTML = `
       <td><input type="checkbox" class="row-toggle" checked aria-label="Include row"></td>
       <td>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <input class="editable-cell assignment-name" data-field="name" value="${esc(item.name)}" placeholder="New Assignment" style="flex:1;min-width:120px">
+        <div class="assignment-cell">
+          <input class="editable-cell assignment-name" data-field="name" value="${esc(item.name)}" placeholder="New Assignment">
           ${dupHtml}
         </div>
       </td>
@@ -512,7 +558,8 @@ function buildTable(items) {
 }
 
 function toggleRow(checkbox) {
-  checkbox.closest("tr")?.classList.toggle("excluded", !checkbox.checked);
+  const row = checkbox.closest("tr");
+  row?.classList.toggle("excluded", !checkbox.checked);
   updateCount();
 }
 
@@ -532,20 +579,60 @@ function addRow() {
   rows[rows.length - 1]?.querySelector(".assignment-name")?.focus();
 }
 
+function getPreviewRows() {
+  return [...document.querySelectorAll("#previewBody tr")];
+}
+
+function areAllRowsSelected() {
+  const rows = getPreviewRows();
+  return rows.length > 0 && rows.every((row) => {
+    const checkbox = row.querySelector(".row-toggle");
+    return checkbox instanceof HTMLInputElement && checkbox.checked;
+  });
+}
+
+function updateBulkToggle() {
+  const button = document.getElementById("bulkToggleBtn");
+  if (!(button instanceof HTMLButtonElement)) return;
+  const hasRows = getPreviewRows().length > 0;
+  button.textContent = areAllRowsSelected() ? "Deselect all" : "Select all";
+  button.disabled = isSending || !hasRows;
+}
+
+function toggleAllRows() {
+  if (isSending) return;
+  const rows = getPreviewRows();
+  if (!rows.length) return;
+
+  const shouldSelectAll = !areAllRowsSelected();
+  rows.forEach((row) => {
+    const checkbox = row.querySelector(".row-toggle");
+    if (!(checkbox instanceof HTMLInputElement)) return;
+    checkbox.checked = shouldSelectAll;
+    row.classList.toggle("excluded", !shouldSelectAll);
+  });
+
+  updateCount();
+}
+
 function updateCount() {
   const selectedCount = document.querySelectorAll("#previewBody tr:not(.excluded)").length;
   document.getElementById("previewCount").textContent = `${selectedCount} task${selectedCount !== 1 ? "s" : ""}`;
 
   const duplicateCount = document.querySelectorAll("#previewBody tr.maybe-dup:not(.excluded)").length;
   const duplicateEl = document.getElementById("dupCount");
+  const duplicateText = document.getElementById("dupCountText");
   duplicateEl.style.display = duplicateCount ? "inline-flex" : "none";
-  duplicateEl.textContent = `${duplicateCount} possible duplicate${duplicateCount !== 1 ? "s" : ""}`;
+  if (duplicateText) {
+    duplicateText.textContent = `${duplicateCount} possible duplicate${duplicateCount !== 1 ? "s" : ""}`;
+  }
 
+  updateBulkToggle();
   refreshActionStates();
 }
 
 async function fetchExistingTasks() {
-  const names = [];
+  const issues = [];
   const maxResults = 100;
   let nextPageToken = null;
 
@@ -565,20 +652,22 @@ async function fetchExistingTasks() {
         response = await localProxyRequest("/jira/search", payload);
       }
 
-      const issues = response.issues || [];
-      issues.forEach((issue) => {
-        if (issue?.fields?.summary) names.push(issue.fields.summary);
+      const rawIssues = Array.isArray(response.issues) ? response.issues : [];
+      const fallbackDomain = appMode === MODES.LOCAL ? getLocalJiraCreds().domain : "";
+      rawIssues.forEach((issue) => {
+        const normalized = normalizeIssueRecord(issue, fallbackDomain);
+        if (normalized) issues.push(normalized);
       });
 
       nextPageToken = response.nextPageToken || null;
-      if (!nextPageToken || !issues.length) break;
+      if (!nextPageToken || !rawIssues.length) break;
     }
   } catch (err) {
     showStatus("previewStatus", "info", `Duplicate check unavailable: ${err.message}`);
     console.warn("Could not fetch existing Jira tasks for duplicate check:", err);
   }
 
-  return names;
+  return issues;
 }
 
 function levenshtein(a, b) {
@@ -599,16 +688,16 @@ function levenshtein(a, b) {
   return dp[m][n];
 }
 
-function findDuplicate(name, existingNames) {
+function findDuplicate(name, existingIssues) {
   let best = null;
   let bestDistance = Infinity;
 
-  for (const existingName of existingNames) {
-    const distance = levenshtein(name, existingName);
-    const threshold = Math.max(3, Math.floor(Math.max(name.length, existingName.length) * 0.15));
+  for (const existingIssue of existingIssues) {
+    const distance = levenshtein(name, existingIssue.summary);
+    const threshold = Math.max(3, Math.floor(Math.max(name.length, existingIssue.summary.length) * 0.15));
     if (distance <= threshold && distance < bestDistance) {
       bestDistance = distance;
-      best = existingName;
+      best = existingIssue;
     }
   }
 
@@ -646,7 +735,7 @@ async function sendToJira() {
       try {
         const response = await createIssue(item);
         if (response.key) {
-          results.push({ name: item.name, status: "ok", key: response.key });
+          results.push({ name: item.name, status: "ok", key: response.key, browseUrl: response.browseUrl || "" });
         } else {
           const message = response.errors
             ? Object.values(response.errors).join(", ")
@@ -685,7 +774,11 @@ async function createIssue(item) {
 
   if (item.dueDate) fields.duedate = item.dueDate;
 
-  return localProxyRequest("/jira/issue", { email, token, domain, fields });
+  const response = await localProxyRequest("/jira/issue", { email, token, domain, fields });
+  return {
+    ...response,
+    browseUrl: response.browseUrl || getJiraBrowseUrl(domain, response.key),
+  };
 }
 
 function normalizeLabel(label) {
@@ -704,7 +797,11 @@ function showResults(results, skipped) {
     <div class="result-item">
       <div class="result-dot ${result.status}"></div>
       <div class="result-item-name">${esc(result.name)}</div>
-      <div class="result-item-status">${result.status === "ok" ? esc(result.key) : `✗ ${esc(result.error)}`}</div>
+      <div class="result-item-status">${result.status === "ok"
+      ? (result.browseUrl
+          ? `<a class="result-link" href="${esc(result.browseUrl)}" target="_blank" rel="noreferrer noopener">${esc(result.key)}</a>`
+          : esc(result.key))
+      : `✗ ${esc(result.error)}`}</div>
     </div>
   `).join("");
 
@@ -713,11 +810,8 @@ function showResults(results, skipped) {
 
 function resetApp() {
   assignments = [];
-  imageBase64 = null;
   lastResults = null;
-  document.getElementById("fileInput").value = "";
-  document.getElementById("uploadPreview").style.display = "none";
-  document.getElementById("previewImg").src = "";
+  clearUploadPreview();
   document.getElementById("previewBody").innerHTML = "";
   document.getElementById("resultList").innerHTML = "";
   clearStatusMessages();
@@ -747,11 +841,15 @@ function refreshActionStates() {
   const parseButton = document.getElementById("parseBtn");
   const sendButton = document.getElementById("sendBtn");
   const addRowButton = document.getElementById("addRowBtn");
+  const bulkToggleButton = document.getElementById("bulkToggleBtn");
   const previewBackButton = document.getElementById("previewBackBtn");
 
   parseButton.disabled = !imageBase64 || isParsing;
   sendButton.disabled = isSending || document.querySelectorAll("#previewBody tr:not(.excluded)").length === 0;
   addRowButton.disabled = isSending;
+  if (bulkToggleButton instanceof HTMLButtonElement) {
+    bulkToggleButton.disabled = isSending || getPreviewRows().length === 0;
+  }
   previewBackButton.disabled = isSending;
 }
 

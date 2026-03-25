@@ -121,7 +121,19 @@ async function handleJiraSearch(request: Request, env: Env): Promise<Response> {
     body: JSON.stringify(searchPayload),
   });
 
-  return proxyUpstream(upstream, "Jira search failed.");
+  const data = await parseResponse(upstream);
+  if (!upstream.ok) {
+    return upstreamError(data, upstream.status, "Jira search failed.");
+  }
+
+  const issues = Array.isArray(data.issues)
+    ? data.issues.map((issue: Record<string, unknown>) => ({
+      ...issue,
+      browseUrl: issueBrowseUrl(jira.domain, String(issue?.key || "")),
+    }))
+    : [];
+
+  return json({ ...data, issues }, upstream.status);
 }
 
 async function handleJiraIssue(request: Request, env: Env): Promise<Response> {
@@ -152,7 +164,15 @@ async function handleJiraIssue(request: Request, env: Env): Promise<Response> {
     body: JSON.stringify({ fields }),
   });
 
-  return proxyUpstream(upstream, "Jira issue creation failed.");
+  const data = await parseResponse(upstream);
+  if (!upstream.ok) {
+    return upstreamError(data, upstream.status, "Jira issue creation failed.");
+  }
+
+  return json({
+    ...data,
+    browseUrl: issueBrowseUrl(jira.domain, String(data?.key || "")),
+  }, upstream.status);
 }
 
 function getJiraConfig(env: Env) {
@@ -183,6 +203,11 @@ function normalizeLabel(value: string) {
   return value.trim().replace(/\s+/g, "_");
 }
 
+function issueBrowseUrl(domain: string, key: string) {
+  if (!domain || !key) return "";
+  return `https://${domain}/browse/${encodeURIComponent(key)}`;
+}
+
 function jiraHeaders(email: string, token: string) {
   return {
     "Content-Type": "application/json",
@@ -211,12 +236,7 @@ async function parseResponse(response: Response): Promise<any> {
   return { error: await response.text() };
 }
 
-async function proxyUpstream(response: Response, fallbackMessage: string): Promise<Response> {
-  const data = await parseResponse(response);
-  if (response.ok) {
-    return json(data, response.status);
-  }
-
+function upstreamError(data: any, status: number, fallbackMessage: string): Response {
   const message =
     data.error ||
     data.errorMessages?.[0] ||
@@ -227,7 +247,7 @@ async function proxyUpstream(response: Response, fallbackMessage: string): Promi
     error: message,
     errorMessages: data.errorMessages,
     errors: data.errors,
-  }, response.status);
+  }, status);
 }
 
 function json(payload: unknown, status = 200): Response {
